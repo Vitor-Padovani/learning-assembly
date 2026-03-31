@@ -1,39 +1,49 @@
 .global main
-.data
-	a: .quad 0
-	msg_in: .asciz "digite o valor de a:"
-	fmt: .asciz "%lld"
-	msg_out: .asciz "resultado: %lld\n"
-.text
+
+.section .data
+num:        .quad 0
+msg_in:     .asciz "digite o valor de a: "
+fmt:        .asciz "%lld"
+msg_out:    .asciz "resultado: %lld\n"
+
+.section .text
 main:
-	mov $msg_in, %rdi
-	call printf
-	mov $fmt, %rdi
-	mov $a, %rsi
-	call scanf
-	
-	cmpq $0, a
-	jl bloco_if
-	#bloco do else
-	movq a, %rax
-	movq $-1, %rbx
-	imulq %rbx
-	jmp fim_if
-	
+    sub $8, %rsp          # alinha o stack em 16 bytes
+
+    # printf("digite o valor de num:")
+    lea msg_in(%rip), %rdi
+    xor %rax, %rax
+    call printf
+
+    # scanf("%lld", &num)
+    lea fmt(%rip), %rdi
+    lea num(%rip), %rsi
+    xor %rax, %rax
+    call scanf
+
+    # carregar num em rax
+    mov num(%rip), %rax
+
+    # if (num < 0)
+    cmp $0, %rax
+    jl bloco_if
+
+    # else: num = -num
+    imul $-1, %rax # neg %rax
+    jmp fim_if
+
 bloco_if:
-	movq a, %rax
-	movq $3, %rbx
-	imulq %rbx
-	addq $1, %rax
+    # num = 3*num + 1
+    imul $3, %rax
+    add $1, %rax
+
 fim_if:
-	movq $msg_out, %rdi
-	movq %rax, %rsi
-	call printf
+    # printf
+    lea msg_out(%rip), %rdi
+    mov %rax, %rsi
+    xor %rax, %rax
+    call printf
 
-	movq $60, %rax
-	movq $0, %rdi
-	syscall
-
-
-	
-	
+    add $8, %rsp          # restaura o stack
+    mov $0, %eax
+    ret

@@ -1,2 +1,24 @@
 # learning-assembly
-ld -dynamic-link /usr/bin/ld.so -lc hello_world.o -o hello_world
+
+```
+gcc hello_printf.s -o a && ./a
+```
+
+## GDB
+
+```
+gcc -g a.s -o a
+gdb a
+b main
+r
+layout regs / linfo registers
+n
+...
+q
+```
+
+Ou
+
+```
+make debug FILE=a
+```
