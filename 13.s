@@ -3,7 +3,8 @@
 
 .section .data
     msg1:   .asciz  "Type a number: "
-    fmt:    .asciz  "%d"
+    fmt_in:    .asciz  "%d"
+    fmt_out:    .asciz  "-> %d\n"
 
 .section .bss
     .comm   num,    8
@@ -12,20 +13,21 @@
 factorial:
     push %rbp
     mov %rsp, %rbp
-    
+
     mov %rdi, %rax
-loop:
-    sub $1, %rdi
+    loop:
+        sub $1, %rdi
 
-    mul %rdi
+        mul %rdi
 
-    cmp $1, %rdi
-    jg loop
-end_loop:
+        cmp $1, %rdi
+        jg loop
+    end_loop:
 
     mov %rbp, %rsp
     pop %rbp
     ret
+
 main:
     sub $8, %rsp
 
@@ -35,7 +37,7 @@ main:
     call printf
 
     // Scanf
-    lea fmt(%rip), %rdi
+    lea fmt_in(%rip), %rdi
     lea num(%rip), %rsi
     xor %rax, %rax
     call scanf
@@ -45,7 +47,7 @@ main:
     call factorial
 
     // Printf
-    lea fmt(%rip), %rdi
+    lea fmt_out(%rip), %rdi
     mov %rax, %rsi
     xor %rax, %rax
     call printf
