@@ -23,6 +23,12 @@ Ou
 make debug FILE=a
 ```
 
+## calculatorExample.s
+
+```
+gcc -g -no-pie -m64 calculator.s -o a -lm && ./a
+```
+
 ## Instructions:
 
 - movb (Byte): Move 8 bits (1 byte).
