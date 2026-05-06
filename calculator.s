@@ -2,13 +2,15 @@
 
 .section .data
 	msg_op1:	.asciz "Type the first operand:\n"
-	msg_opt:	.asciz "Type the operator (+, -):\n"
+	msg_opt:	.asciz "Type the operator (+, -, *, /):\n"
 	msg_op2:	.asciz "Type the second operand:\n"
 	msg_cont:	.asciz "Continue? (y/n)"
 
 	fmt_opn_in:		.asciz "%lf"
 	fmt_char_in:	.asciz " %c"
 	fmt_result: 	.asciz "-> %g\n"
+
+	msg_div_zero:	.asciz "Error: Division by zero not allowed\n"
 
 .section .bss
 	.comm	op1,	8
@@ -32,6 +34,38 @@ op_subtraction:
 	mov %rbp, %rsp
     pop %rbp
     ret
+
+op_multiplication:
+    push %rbp
+    mov %rsp, %rbp
+    mulsd %xmm1, %xmm0
+	mov %rbp, %rsp
+    pop %rbp
+    ret
+
+op_division:
+    push %rbp
+    mov %rsp, %rbp
+
+	// Verifies division by zero
+    xorpd %xmm2, %xmm2
+    ucomisd %xmm2, %xmm1
+    jne .div_ok
+
+    lea msg_div_zero(%rip), %rdi
+    xor %rax, %rax
+    call printf
+    xor %rax, %rax
+    jmp .div_finish
+
+	.div_ok:
+		divsd %xmm1, %xmm0
+		mov $1, %rax
+
+	.div_finish:
+		mov %rbp, %rsp
+		pop %rbp
+		ret
 
 // ========== MAIN FUNCTIONS ========== //
 show_result:
@@ -94,6 +128,10 @@ main:
 	je .case_sum
 	cmpb $'-', %al
 	je .case_subtraction
+	cmpb $'*', %al
+	je .case_multplication
+	cmpb $'/', %al
+	je .case_division
 
 // ========== CASES ========== //
 .case_sum:
@@ -109,6 +147,24 @@ main:
     movsd op1(%rip), %xmm0
     movsd op2(%rip), %xmm1
     call op_subtraction
+    call show_result
+    jmp .main_repeat
+
+.case_multplication:
+    call read_op2
+    movsd op1(%rip), %xmm0
+    movsd op2(%rip), %xmm1
+    call op_multiplication
+    call show_result
+    jmp .main_repeat
+
+.case_division:
+    call read_op2
+    movsd op1(%rip), %xmm0
+    movsd op2(%rip), %xmm1
+    call op_division
+    test %rax, %rax
+    jz .main_repeat
     call show_result
     jmp .main_repeat
 
