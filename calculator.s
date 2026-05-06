@@ -11,6 +11,9 @@
 	fmt_result: 	.asciz "-> %g\n"
 
 	msg_div_zero:	.asciz "Error: Division by zero not allowed\n"
+    msg_neg_sqrt:   .asciz  "Error: Negative squre root not allowed\n"
+
+    const_one:      .double 1.0
 
 .section .bss
 	.comm	op1,	8
@@ -35,7 +38,7 @@ op_subtraction:
     pop %rbp
     ret
 
-op_multiplication:
+op_mult:
     push %rbp
     mov %rsp, %rbp
     mulsd %xmm1, %xmm0
@@ -43,14 +46,14 @@ op_multiplication:
     pop %rbp
     ret
 
-op_division:
+op_div:
     push %rbp
     mov %rsp, %rbp
 
 	// Verifies division by zero
     xorpd %xmm2, %xmm2
     ucomisd %xmm2, %xmm1
-    jne .div_ok
+    jne .div_allowed
 
     lea msg_div_zero(%rip), %rdi
     xor %rax, %rax
@@ -58,7 +61,7 @@ op_division:
     xor %rax, %rax
     jmp .div_finish
 
-	.div_ok:
+	.div_allowed:
 		divsd %xmm1, %xmm0
 		mov $1, %rax
 
@@ -67,12 +70,57 @@ op_division:
 		pop %rbp
 		ret
 
+//                             ALLOWED TO USE LIBC POW???
+op_pow:
+    push %rbp
+    mov %rsp, %rbp
+
+    # Converts exponent to integer
+    cvttsd2si %xmm1, %rcx
+
+    movsd const_one(%rip), %xmm1
+    test %rcx, %rcx
+    jz .pow_finish
+
+.pow_loop:
+    mulsd %xmm0, %xmm1
+    dec %rcx
+    jnz .pow_loop
+
+.pow_finish:
+    movsd %xmm1, %xmm0
+
+    pop %rbp
+    ret
+
+op_sqrt:
+    push %rbp
+    mov %rsp, %rbp
+
+	// Verifies negative square root
+    xorpd %xmm1, %xmm1
+    ucomisd %xmm0, %xmm1
+    jbe .sqrt_allowed
+
+    lea msg_neg_sqrt(%rip), %rdi
+    xor %rax, %rax
+    call printf
+    xor %rax, %rax
+    jmp .sqrt_finish
+
+	.sqrt_allowed:
+		sqrtsd  %xmm0, %xmm0
+		mov     $1, %rax
+
+	.sqrt_finish:
+		pop     %rbp
+		ret
+
 // ========== MAIN FUNCTIONS ========== //
 show_result:
     push %rbp
     mov %rsp, %rbp
     lea fmt_result(%rip), %rdi
-    #! mov     $1, %rax           # 1 argumento SSE para printf
 	call printf
 	mov %rbp, %rsp
 	pop %rbp
@@ -132,6 +180,29 @@ main:
 	je .case_multplication
 	cmpb $'/', %al
 	je .case_division
+	cmpb $'^', %al
+	je .case_pow
+	cmpb $'r', %al
+	je .case_sqrt
+
+# Asks if the user wants to repeat or finish
+.main_repeat:
+    lea msg_cont(%rip), %rdi
+    xor %rax, %rax
+    call printf
+
+    lea fmt_char_in(%rip), %rdi
+    lea opt(%rip), %rsi
+    xor %rax, %rax
+    call scanf
+
+	mov opt(%rip), %eax
+    cmpb $'y', %al
+    je .main_loop
+
+	add $8, %rsp
+	xor %rax, %rax
+	ret
 
 // ========== CASES ========== //
 .case_sum:
@@ -154,7 +225,7 @@ main:
     call read_op2
     movsd op1(%rip), %xmm0
     movsd op2(%rip), %xmm1
-    call op_multiplication
+    call op_mult
     call show_result
     jmp .main_repeat
 
@@ -162,27 +233,24 @@ main:
     call read_op2
     movsd op1(%rip), %xmm0
     movsd op2(%rip), %xmm1
-    call op_division
+    call op_div
     test %rax, %rax
     jz .main_repeat
     call show_result
     jmp .main_repeat
 
-# Asks if the user wants to repeat or finish
-.main_repeat:
-    lea msg_cont(%rip), %rdi
-    xor %rax, %rax
-    call printf
+.case_pow:
+    call    read_op2
+    movsd   op1(%rip), %xmm0
+    movsd   op2(%rip), %xmm1
+    call    op_pow
+    call    show_result
+    jmp     .main_repeat
 
-    lea fmt_char_in(%rip), %rdi
-    lea opt(%rip), %rsi
-    xor %rax, %rax
-    call scanf
-
-	mov opt(%rip), %eax
-    cmpb $'y', %al
-    je .main_loop
-
-	add $8, %rsp
-	xor %rax, %rax
-	ret
+.case_sqrt:
+    movsd   op1(%rip), %xmm0
+    call    op_sqrt
+    test    %rax, %rax
+    jz      .main_repeat
+    call    show_result
+    jmp     .main_repeat
