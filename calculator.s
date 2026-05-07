@@ -12,9 +12,10 @@
 
 	msg_div_zero:	.asciz "Error: Division by zero not allowed\n"
     msg_neg_sqrt:   .asciz "Error: Negative squre root not allowed\n"
-    msg_fact_inv:   .asciz "Error: factorial requires a non-negative integer\n"
-    msg_arr_inv:    .asciz "Error: arrangement requires non-negative integers with n >= r\n"
-    msg_comb_inv:   .asciz "Error: combination needs non-negative integers and n >= r\n"
+    msg_fact_inv:   .asciz "Error: Factorial requires a non-negative integer\n"
+    msg_arr_inv:    .asciz "Error: Arrangement requires non-negative integers with n >= r\n"
+    msg_comb_inv:   .asciz "Error: Combination needs non-negative integers and n >= r\n"
+    msg_inv_zero:   .asciz "Error: Not allowed to invert zero\n"
 
     const_one:      .double 1.0
 
@@ -325,6 +326,31 @@ op_comb:
 	pop %rbp
     ret
 
+op_inv:
+    push %rbp
+    mov %rsp, %rbp
+
+    xorpd %xmm1, %xmm1
+    ucomisd %xmm1, %xmm0 # op1 == 0?
+    jne .inv_ok
+
+    lea msg_inv_zero(%rip), %rdi
+    xor %rax, %rax
+    call printf
+    xor %rax, %rax
+    jmp .inv_end
+
+.inv_ok:
+    movsd const_one(%rip), %xmm1
+    divsd %xmm0, %xmm1 # 1.0 / op1
+    movsd %xmm1, %xmm0
+    mov $1, %rax
+
+.inv_end:
+    mov %rbp, %rsp
+	pop %rbp
+    ret
+
 // ========== MAIN FUNCTIONS ========== //
 show_result:
     push %rbp
@@ -399,6 +425,8 @@ main:
 	je .case_fact
     cmpb $'c', %al
 	je .case_comb
+    cmpb $'i', %al
+	je .case_inv
 
 # Asks if the user wants to repeat or finish
 .main_repeat:
@@ -493,6 +521,14 @@ main:
     movsd op1(%rip), %xmm0
     movsd op2(%rip), %xmm1
     call op_comb
+    test %rax, %rax
+    jz .main_repeat
+    call show_result
+    jmp .main_repeat
+
+.case_inv:
+    movsd op1(%rip), %xmm0
+    call op_inv
     test %rax, %rax
     jz .main_repeat
     call show_result
