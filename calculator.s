@@ -2,16 +2,19 @@
 
 .section .data
 	msg_op1:	.asciz "Type the first operand:\n"
-	msg_opt:	.asciz "Type the operator (+, -, *, /):\n"
+	msg_opt:	.asciz "Type the operator (+, -, *, /, ^, r, a, !, c):\n"
 	msg_op2:	.asciz "Type the second operand:\n"
-	msg_cont:	.asciz "Continue? (y/n)"
+	msg_cont:	.asciz "Continue? (y/n):\n"
 
 	fmt_opn_in:		.asciz "%lf"
 	fmt_char_in:	.asciz " %c"
 	fmt_result: 	.asciz "-> %g\n"
 
 	msg_div_zero:	.asciz "Error: Division by zero not allowed\n"
-    msg_neg_sqrt:   .asciz  "Error: Negative squre root not allowed\n"
+    msg_neg_sqrt:   .asciz "Error: Negative squre root not allowed\n"
+    msg_fact_inv:   .asciz "Error: factorial requires a non-negative integer\n"
+    msg_arr_inv:    .asciz "Error: arrangement requires non-negative integers with n >= r\n"
+    msg_comb_inv:   .asciz "Error: combination needs non-negative integers and n >= r\n"
 
     const_one:      .double 1.0
 
@@ -70,7 +73,7 @@ op_div:
 		pop %rbp
 		ret
 
-//                             ALLOWED TO USE LIBC POW???
+//                             ALLOWED TO USE LIBC POW??? accepts negative exponent?
 op_pow:
     push %rbp
     mov %rsp, %rbp
@@ -115,6 +118,212 @@ op_sqrt:
 	.sqrt_finish:
 		pop     %rbp
 		ret
+
+factorial:
+    push %rbp
+    mov %rsp, %rbp
+
+    # Converts a double to integer
+    cvttsd2si %xmm0, %rcx
+    mov $1, %rax
+
+    cmp $1, %rcx
+    jle .fact_done
+
+.fact_loop:
+    imul %rcx, %rax
+    dec %rcx
+    cmp $1, %rcx
+    jg .fact_loop
+
+.fact_done:
+    # Converts an integer to double
+    cvtsi2sd %rax, %xmm0
+    mov %rbp, %rsp
+	pop %rbp
+    ret
+
+op_fact:
+    push %rbp
+    mov %rsp, %rbp
+
+    # n >= 0?
+    xorpd %xmm1, %xmm1
+    ucomisd %xmm1, %xmm0
+    jb .fact_error
+
+    # n is integer? compare n with (double)(int)n
+    cvttsd2si %xmm0, %rax
+    cvtsi2sd %rax, %xmm1
+    ucomisd %xmm1, %xmm0
+    jne .fact_error
+
+    call factorial
+    mov $1, %rax
+    jmp .fact_end
+
+.fact_error:
+    lea msg_fact_inv(%rip), %rdi
+    xor %rax, %rax
+    call printf
+    xor %rax, %rax
+
+.fact_end:
+    mov %rbp, %rsp
+	pop %rbp
+    ret
+
+op_arr:
+    push %rbp
+    mov %rsp, %rbp
+    push %r12 # r12 = n (callee-saved)
+    push %r13 # r13 = r (callee-saved)
+
+    movsd %xmm0, -8(%rbp) # save n temporarily
+    movsd %xmm1, -16(%rbp) # save r temporarily
+
+    # n >= 0?
+    xorpd %xmm2, %xmm2
+    ucomisd %xmm2, %xmm0
+    jb .arr_error
+
+    # r >= 0?
+    ucomisd %xmm2, %xmm1
+    jb .arr_error
+
+    # n is integer?
+    cvttsd2si %xmm0, %rax
+    cvtsi2sd %rax, %xmm2
+    ucomisd %xmm2, %xmm0
+    jne .arr_error
+
+    # r is integer?
+    movsd -16(%rbp), %xmm0
+    cvttsd2si %xmm0, %rax
+    cvtsi2sd %rax, %xmm2
+    ucomisd %xmm2, %xmm0
+    jne .arr_error
+
+    # n >= r?
+    movsd -8(%rbp), %xmm0
+    movsd -16(%rbp), %xmm1
+    ucomisd %xmm0, %xmm1 # r vs n
+    ja .arr_error
+
+    # store n and r as integers
+    cvttsd2si %xmm0, %r12 # r12 = n
+    cvttsd2si %xmm1, %r13 # r13 = r
+
+    # compute n!
+    cvtsi2sd %r12, %xmm0
+    call factorial
+    movsd %xmm0, -8(%rbp) # save n!
+
+    # compute (n-r)!
+    mov %r12, %rax
+    sub %r13, %rax # rax = n - r
+    cvtsi2sd %rax, %xmm0
+    call factorial # xmm0 = (n-r)!
+
+    # A(n,r) = n! / (n-r)!
+    movsd -8(%rbp), %xmm1 # xmm1 = n!
+    divsd %xmm0, %xmm1
+    movsd %xmm1, %xmm0
+
+    mov $1, %rax
+    jmp .arr_end
+
+.arr_error:
+    lea msg_arr_inv(%rip), %rdi
+    xor %rax, %rax
+    call printf
+    xor %rax, %rax
+
+.arr_end:
+    pop %r13
+    pop %r12
+    mov %rbp, %rsp
+	pop %rbp
+    ret
+
+op_comb:
+    push %rbp
+    mov %rsp, %rbp
+    push %r12 # r12 = n (callee-saved)
+    push %r13 # r13 = r (callee-saved)
+
+    movsd %xmm0, -8(%rbp)    # save n
+    movsd %xmm1, -16(%rbp)   # save r
+
+    # n >= 0?
+    xorpd %xmm2, %xmm2
+    ucomisd %xmm2, %xmm0
+    jb .comb_error
+
+    # r >= 0?
+    ucomisd %xmm2, %xmm1
+    jb .comb_error
+
+    # n is integer?
+    cvttsd2si %xmm0, %rax
+    cvtsi2sd %rax, %xmm2
+    ucomisd %xmm2, %xmm0
+    jne .comb_error
+
+    # r is integer?
+    movsd -16(%rbp), %xmm0
+    cvttsd2si %xmm0, %rax
+    cvtsi2sd %rax, %xmm2
+    ucomisd %xmm2, %xmm0
+    jne .comb_error
+
+    # n >= r?
+    movsd -8(%rbp), %xmm0
+    movsd -16(%rbp), %xmm1
+    ucomisd %xmm0, %xmm1 # r vs n
+    ja .comb_error
+
+    # store n and r as integers
+    cvttsd2si %xmm0, %r12 # r12 = n
+    cvttsd2si %xmm1, %r13 # r13 = r
+
+    # compute n!
+    cvtsi2sd %r12, %xmm0
+    call factorial
+    movsd %xmm0, -8(%rbp) # save n!
+
+    # compute r!
+    cvtsi2sd %r13, %xmm0
+    call factorial
+    movsd %xmm0, -16(%rbp) # save r!
+
+    # compute (n-r)!
+    mov %r12, %rax
+    sub %r13, %rax # rax = n - r
+    cvtsi2sd %rax, %xmm0
+    call factorial # xmm0 = (n-r)!
+
+    # C(n,r) = n! / (r! * (n-r)!)
+    movsd -16(%rbp), %xmm1 # xmm1 = r!
+    mulsd %xmm0, %xmm1 # xmm1 = r! * (n-r)!
+    movsd -8(%rbp), %xmm0 # xmm0 = n!
+    divsd %xmm1, %xmm0
+
+    mov $1, %rax
+    jmp .comb_end
+
+.comb_error:
+    lea msg_comb_inv(%rip), %rdi
+    xor %rax, %rax
+    call printf
+    xor %rax, %rax
+
+.comb_end:
+    pop %r13
+    pop %r12
+    mov %rbp, %rsp
+	pop %rbp
+    ret
 
 // ========== MAIN FUNCTIONS ========== //
 show_result:
@@ -175,15 +384,21 @@ main:
 	cmpb $'+', %al
 	je .case_sum
 	cmpb $'-', %al
-	je .case_subtraction
+	je .case_sub
 	cmpb $'*', %al
-	je .case_multplication
+	je .case_mult
 	cmpb $'/', %al
-	je .case_division
+	je .case_div
 	cmpb $'^', %al
 	je .case_pow
 	cmpb $'r', %al
 	je .case_sqrt
+    cmpb $'a', %al
+	je .case_arr
+    cmpb $'!', %al
+	je .case_fact
+    cmpb $'c', %al
+	je .case_comb
 
 # Asks if the user wants to repeat or finish
 .main_repeat:
@@ -213,7 +428,7 @@ main:
     call show_result
     jmp .main_repeat
 
-.case_subtraction:
+.case_sub:
 	call read_op2
     movsd op1(%rip), %xmm0
     movsd op2(%rip), %xmm1
@@ -221,7 +436,7 @@ main:
     call show_result
     jmp .main_repeat
 
-.case_multplication:
+.case_mult:
     call read_op2
     movsd op1(%rip), %xmm0
     movsd op2(%rip), %xmm1
@@ -229,7 +444,7 @@ main:
     call show_result
     jmp .main_repeat
 
-.case_division:
+.case_div:
     call read_op2
     movsd op1(%rip), %xmm0
     movsd op2(%rip), %xmm1
@@ -240,17 +455,45 @@ main:
     jmp .main_repeat
 
 .case_pow:
-    call    read_op2
-    movsd   op1(%rip), %xmm0
-    movsd   op2(%rip), %xmm1
-    call    op_pow
-    call    show_result
-    jmp     .main_repeat
+    call read_op2
+    movsd op1(%rip), %xmm0
+    movsd op2(%rip), %xmm1
+    call op_pow
+    call show_result
+    jmp .main_repeat
 
 .case_sqrt:
-    movsd   op1(%rip), %xmm0
-    call    op_sqrt
-    test    %rax, %rax
-    jz      .main_repeat
-    call    show_result
-    jmp     .main_repeat
+    movsd op1(%rip), %xmm0
+    call op_sqrt
+    test %rax, %rax
+    jz .main_repeat
+    call show_result
+    jmp .main_repeat
+
+.case_arr:
+    call read_op2
+    movsd op1(%rip), %xmm0
+    movsd op2(%rip), %xmm1
+    call op_arr
+    test %rax, %rax
+    jz .main_repeat
+    call show_result
+    jmp .main_repeat
+
+.case_fact:
+    movsd op1(%rip), %xmm0
+    call op_fact
+    test %rax, %rax
+    jz .main_repeat
+    call show_result
+    jmp .main_repeat
+
+.case_comb:
+    call read_op2
+    movsd op1(%rip), %xmm0
+    movsd op2(%rip), %xmm1
+    call op_comb
+    test %rax, %rax
+    jz .main_repeat
+    call show_result
+    jmp .main_repeat
