@@ -2,7 +2,7 @@
 
 .section .data
 	msg_op1:	.asciz "Type the first operand:\n"
-	msg_opt:	.asciz "Type the operator (+, -, *, /, ^, r, a, !, c):\n"
+	msg_opt:	.asciz "Type the operator (+, -, *, /, ^, c, a, !, i, r, l, p):\n"
 	msg_op2:	.asciz "Type the second operand:\n"
 	msg_cont:	.asciz "Continue? (y/n):\n"
 
@@ -16,6 +16,7 @@
     msg_arr_inv:    .asciz "Error: Arrangement requires non-negative integers with n >= r\n"
     msg_comb_inv:   .asciz "Error: Combination needs non-negative integers and n >= r\n"
     msg_inv_zero:   .asciz "Error: Not allowed to invert zero\n"
+    msg_log_inv:    .asciz "Error: Log must be > 0 and have base != 1\n"
 
     const_one:      .double 1.0
 
@@ -74,7 +75,7 @@ op_div:
 		pop %rbp
 		ret
 
-//                             ALLOWED TO USE LIBC POW??? accepts negative exponent?
+//                             ALLOWED TO USE LIBC POW??? YES!
 op_pow:
     push %rbp
     mov %rsp, %rbp
@@ -350,6 +351,55 @@ op_inv:
     mov %rbp, %rsp
 	pop %rbp
     ret
+//                                       PODE USAR LOG DA LIBC??? SIM!
+op_log:
+    push %rbp
+    mov %rsp, %rbp
+
+    movsd %xmm0, -8(%rbp)    # salva op1
+    movsd %xmm1, -16(%rbp)   # salva op2 (base)
+
+    # Valida op1 > 0
+    xorpd %xmm2, %xmm2
+    ucomisd %xmm2, %xmm0
+    jbe .log_error
+
+    # Valida base > 0
+    ucomisd %xmm2, %xmm1
+    jbe .log_error
+
+    # Valida base != 1.0
+    movsd   const_one(%rip), %xmm3
+    ucomisd %xmm3, %xmm1
+    je .log_error
+
+    # ln(op1)
+    movsd -8(%rbp), %xmm0
+    call log
+    movsd %xmm0, -8(%rbp)    # salva ln(op1)
+
+    # ln(base)
+    movsd -16(%rbp), %xmm0
+    call log                 # xmm0 = ln(base)
+
+    # resultado = ln(op1) / ln(base)
+    movsd -8(%rbp), %xmm1
+    divsd %xmm0, %xmm1
+    movsd %xmm1, %xmm0
+
+    mov $1, %rax
+    jmp .log_end
+
+.log_error:
+    lea     msg_log_inv(%rip), %rdi
+    xor     %rax, %rax
+    call    printf
+    xor     %rax, %rax
+
+.log_end:
+    mov %rbp, %rsp
+	pop %rbp
+    ret
 
 // ========== MAIN FUNCTIONS ========== //
 show_result:
@@ -427,6 +477,8 @@ main:
 	je .case_comb
     cmpb $'i', %al
 	je .case_inv
+    cmpb $'l', %al
+	je .case_log
 
 # Asks if the user wants to repeat or finish
 .main_repeat:
@@ -529,6 +581,16 @@ main:
 .case_inv:
     movsd op1(%rip), %xmm0
     call op_inv
+    test %rax, %rax
+    jz .main_repeat
+    call show_result
+    jmp .main_repeat
+
+.case_log:
+    call read_op2
+    movsd op1(%rip), %xmm0
+    movsd op2(%rip), %xmm1
+    call op_log
     test %rax, %rax
     jz .main_repeat
     call show_result
